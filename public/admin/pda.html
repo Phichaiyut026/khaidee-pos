@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>เครื่อง PDA จำลอง</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=Prompt:wght@500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="admin.css">
+  <style>
+    body { background: #e9ebf0; }
+    .stage { display: flex; gap: 32px; padding: 24px; align-items: flex-start; justify-content: center; flex-wrap: wrap; min-height: 100vh; }
+
+    /* Device */
+    .device { position: relative; width: 400px; flex: none; background: linear-gradient(160deg, #2c313c, #171a21); border-radius: 36px 36px 46px 46px; padding: 18px 16px 22px; box-shadow: 0 30px 60px rgba(15, 20, 30, .35), inset 0 1px 0 rgba(255,255,255,.08); }
+    .scan-head { position: absolute; top: -10px; left: 50%; transform: translateX(-50%); width: 120px; height: 18px; background: #0d0f14; border-radius: 10px 10px 4px 4px; display: grid; place-items: center; }
+    .scan-head i { width: 70px; height: 5px; border-radius: 3px; background: #3a1010; transition: background .1s, box-shadow .1s; }
+    .scan-head.on i { background: #ff2a2a; box-shadow: 0 0 14px 4px rgba(255, 40, 40, .7); }
+    .dev-top { display: flex; align-items: center; gap: 8px; color: #9aa3b5; font-size: 12px; padding: 4px 10px 10px; }
+    .led { width: 10px; height: 10px; border-radius: 50%; background: #3b4252; transition: background .1s, box-shadow .1s; }
+    .led.ok { background: #2ee67a; box-shadow: 0 0 10px #2ee67a; }
+    .led.err { background: #ff4545; box-shadow: 0 0 10px #ff4545; }
+    .dev-top .model { font-weight: 600; letter-spacing: .08em; color: #c8cfdc; }
+    .dev-top .spacer { flex: 1; }
+    .screen { position: relative; width: 368px; height: 620px; border-radius: 10px; overflow: hidden; background: #fff; border: 3px solid #0b0d11; }
+    .screen iframe { width: 100%; height: 100%; border: 0; display: block; }
+    .laser { position: absolute; left: 0; right: 0; top: 0; height: 3px; background: #ff2a2a; box-shadow: 0 0 12px 3px rgba(255, 40, 40, .6); opacity: 0; pointer-events: none; }
+    .laser.go { animation: sweep .35s ease-in-out; }
+    @keyframes sweep { 0% { top: 8%; opacity: 1; } 50% { top: 88%; opacity: 1; } 100% { top: 45%; opacity: 0; } }
+    .keys { display: flex; align-items: center; justify-content: center; gap: 18px; margin-top: 18px; }
+    .side { width: 52px; height: 40px; border-radius: 12px; border: 0; background: #2f3542; color: #9aa3b5; font-size: 13px; }
+    .scan-btn { width: 150px; height: 64px; border: 0; border-radius: 32px; background: linear-gradient(180deg, #ffb340, #f08a00); color: #3a2000; font-weight: 600; font-size: 18px; letter-spacing: .1em; cursor: pointer; box-shadow: 0 6px 0 #a85d00, 0 10px 18px rgba(0,0,0,.35); transition: transform .05s, box-shadow .05s; user-select: none; }
+    .scan-btn:active, .scan-btn.pressed { transform: translateY(5px); box-shadow: 0 1px 0 #a85d00, 0 3px 8px rgba(0,0,0,.35); }
+    .scan-btn:disabled { filter: grayscale(.4) brightness(.9); cursor: progress; }
+    .side-trigger { position: absolute; top: 230px; width: 7px; height: 80px; background: #f08a00; border-radius: 4px; cursor: pointer; border: 0; padding: 0; }
+    .side-trigger.l { left: -7px; } .side-trigger.r { right: -7px; }
+
+    /* Control panel */
+    .panel { width: min(520px, 100%); display: flex; flex-direction: column; gap: 14px; }
+    .panel h1 { font-size: 22px; }
+    .panel h2 { font-size: 15px; margin-bottom: 8px; }
+    .shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; max-height: 360px; overflow: auto; padding: 2px; }
+    .tile { border: 2px solid var(--border); background: var(--surface); border-radius: 10px; padding: 8px 10px; text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
+    .tile:hover { border-color: #b8c3e6; }
+    .tile.aim { border-color: #ff2a2a; box-shadow: 0 0 0 3px rgba(255, 42, 42, .15); }
+    .tile .nm { font-size: 13px; font-weight: 500; line-height: 1.3; }
+    .tile .cd { font-size: 11px; color: var(--muted); font-family: ui-monospace, monospace; word-break: break-all; }
+    .tile.special { border-style: dashed; }
+    .opts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .log { max-height: 180px; overflow: auto; font-size: 13px; }
+    .log div { display: flex; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+    .log .ok { color: var(--success); font-weight: 600; } .log .err { color: var(--danger); font-weight: 600; }
+    .log code { color: var(--muted); font-size: 12px; word-break: break-all; }
+    kbd { background: var(--surface-2); border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; font-size: 12px; }
+    @media (max-width: 460px) { .device { transform: scale(.85); transform-origin: top center; } }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div class="device">
+      <div class="scan-head" id="head"><i></i></div>
+      <button class="side-trigger l" data-scan title="ปุ่มสแกนด้านข้าง"></button>
+      <button class="side-trigger r" data-scan title="ปุ่มสแกนด้านข้าง"></button>
+      <div class="dev-top"><span class="led" id="led"></span><span class="model">PDA-01</span><span class="spacer"></span><span>Wi-Fi ▂▄▆</span><span>🔋 100%</span></div>
+      <div class="screen">
+        <iframe id="app" data-pda="1" src="/admin/#lookup" title="หน้าจอ PDA"></iframe>
+        <div class="laser" id="laser"></div>
+      </div>
+      <div class="keys">
+        <button class="side" id="k-back" title="ย้อนกลับ">◀</button>
+        <button class="scan-btn" id="scan" data-scan>SCAN</button>
+        <button class="side" id="k-home" title="หน้าหลัก">●</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div>
+        <h1>เครื่อง PDA จำลอง</h1>
+        <p class="muted" style="margin:6px 0 0">หน้าจอเครื่องคือระบบจริง เลือกสินค้าที่จะเล็ง แล้วกดปุ่ม <b>SCAN</b> (หรือกด <kbd>Space</kbd>) — ดับเบิลคลิกที่สินค้าเพื่อยิงทันที</p>
+      </div>
+
+      <div class="card card-pad">
+        <h2>แอปบนเครื่อง</h2>
+        <div class="tabs" id="modes">
+          <button data-hash="#lookup" class="active">เช็คสินค้า</button>
+          <button data-hash="#pos">ขายหน้าร้าน (POS)</button>
+          <button data-hash="#products">สินค้า / สต็อก</button>
+        </div>
+      </div>
+
+      <div class="card card-pad">
+        <h2>สินค้าตรงหน้าเครื่อง</h2>
+        <div class="shelf" id="shelf"><p class="muted">กำลังโหลด...</p></div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <input class="input" id="custom" placeholder="หรือพิมพ์รหัสเอง แล้วกด Enter เพื่อยิง">
+        </div>
+      </div>
+
+      <div class="card card-pad">
+        <h2>ตั้งค่าการจำลอง</h2>
+        <div class="opts">
+          <label class="field">รูปแบบโค้ดบนสินค้า
+            <select class="input" id="format">
+              <option value="barcode">บาร์โค้ด / รหัสตรงๆ</option>
+              <option value="url">QR แบบลิงก์ (URL)</option>
+              <option value="json">QR แบบ JSON</option>
+            </select>
+          </label>
+          <label class="field">ความเร็วเครื่องสแกน
+            <select class="input" id="speed">
+              <option value="5">เร็ว (USB)</option>
+              <option value="15" selected>ปกติ</option>
+              <option value="35">ช้า (Bluetooth)</option>
+            </select>
+          </label>
+          <label class="check"><input type="checkbox" id="thai" checked> แป้นพิมพ์เครื่องเป็นภาษาไทย</label>
+          <label class="check"><input type="checkbox" id="sound" checked> เสียงบี๊บ</label>
+        </div>
+      </div>
+
+      <div class="card card-pad">
+        <h2>ประวัติการยิง</h2>
+        <div class="log" id="log"><p class="muted">ยังไม่มี</p></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (s) => document.querySelector(s);
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const frame = $('#app');
+    let products = [];
+    let aim = null; // { label, code }
+    let busy = false;
+
+    // ---- Keyboard model: what a HID scanner physically presses -------------
+    // US layout → physical key code (+ shift)
+    const US = {};
+    'abcdefghijklmnopqrstuvwxyz'.split('').forEach((c) => { US[c] = ['Key' + c.toUpperCase(), false]; US[c.toUpperCase()] = ['Key' + c.toUpperCase(), true]; });
+    '0123456789'.split('').forEach((d) => { US[d] = ['Digit' + d, false]; });
+    ')!@#$%^&*('.split('').forEach((c, i) => { US[c] = ['Digit' + i, true]; });
+    Object.entries({ '-': 'Minus', '=': 'Equal', '[': 'BracketLeft', ']': 'BracketRight', '\\': 'Backslash', ';': 'Semicolon', "'": 'Quote', ',': 'Comma', '.': 'Period', '/': 'Slash', '`': 'Backquote', ' ': 'Space' })
+      .forEach(([c, k]) => { US[c] = [k, false]; });
+    Object.entries({ '_': 'Minus', '+': 'Equal', '{': 'BracketLeft', '}': 'BracketRight', '|': 'Backslash', ':': 'Semicolon', '"': 'Quote', '<': 'Comma', '>': 'Period', '?': 'Slash', '~': 'Backquote' })
+      .forEach(([c, k]) => { US[c] = [k, true]; });
+
+    // Thai Kedmanee: the character each physical key produces [normal, shift]
+    const KEDMANEE = {
+      Backquote: ['_', '%'], Digit1: ['ๅ', '+'], Digit2: ['/', '๑'], Digit3: ['-', '๒'], Digit4: ['ภ', '๓'], Digit5: ['ถ', '๔'], Digit6: ['ุ', 'ู'], Digit7: ['ึ', '฿'], Digit8: ['ค', '๕'], Digit9: ['ต', '๖'], Digit0: ['จ', '๗'], Minus: ['ข', '๘'], Equal: ['ช', '๙'],
+      KeyQ: ['ๆ', '๐'], KeyW: ['ไ', '"'], KeyE: ['ำ', 'ฎ'], KeyR: ['พ', 'ฑ'], KeyT: ['ะ', 'ธ'], KeyY: ['ั', 'ํ'], KeyU: ['ี', '๊'], KeyI: ['ร', 'ณ'], KeyO: ['น', 'ฯ'], KeyP: ['ย', 'ญ'], BracketLeft: ['บ', 'ฐ'], BracketRight: ['ล', ','], Backslash: ['ฃ', 'ฅ'],
+      KeyA: ['ฟ', 'ฤ'], KeyS: ['ห', 'ฆ'], KeyD: ['ก', 'ฏ'], KeyF: ['ด', 'โ'], KeyG: ['เ', 'ฌ'], KeyH: ['้', '็'], KeyJ: ['่', '๋'], KeyK: ['า', 'ษ'], KeyL: ['ส', 'ศ'], Semicolon: ['ว', 'ซ'], Quote: ['ง', '.'],
+      KeyZ: ['ผ', '('], KeyX: ['ป', ')'], KeyC: ['แ', 'ฉ'], KeyV: ['อ', 'ฮ'], KeyB: ['ิ', 'ฺ'], KeyN: ['ื', '์'], KeyM: ['ท', '?'], Comma: ['ม', 'ฒ'], Period: ['ใ', 'ฬ'], Slash: ['ฝ', 'ฦ'], Space: [' ', ' '],
+    };
+
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    async function typeIntoDevice(text) {
+      const w = frame.contentWindow;
+      const d = w.document;
+      const thai = $('#thai').checked;
+      const gap = Number($('#speed').value);
+      const fire = (init) => (d.activeElement || d.body).dispatchEvent(new w.KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
+      for (const ch of text) {
+        const m = US[ch];
+        if (!m) { fire({ key: ch, code: '' }); await sleep(gap); continue; } // not on a US keyboard
+        const [code, shift] = m;
+        if (shift) fire({ key: 'Shift', code: 'ShiftLeft', shiftKey: true });
+        const key = thai && KEDMANEE[code] ? KEDMANEE[code][shift ? 1 : 0] : ch;
+        fire({ key, code, shiftKey: shift });
+        await sleep(gap);
+      }
+      fire({ key: 'Enter', code: 'Enter' });
+    }
+
+    // ---- Feedback: beep + LED (results come from the app inside the screen) ----
+    let audio;
+    function beep(ok) {
+      if (!$('#sound').checked) return;
+      try {
+        audio = audio || new AudioContext();
+        const osc = audio.createOscillator();
+        const gain = audio.createGain();
+        osc.frequency.value = ok ? 2400 : 300;
+        gain.gain.value = 0.07;
+        osc.connect(gain).connect(audio.destination);
+        osc.start();
+        osc.stop(audio.currentTime + (ok ? 0.09 : 0.35));
+      } catch { /* no audio */ }
+    }
+    let pending = null;
+    let ledTimer;
+    function onResult(ok) {
+      beep(ok);
+      const led = $('#led');
+      led.className = 'led ' + (ok ? 'ok' : 'err');
+      clearTimeout(ledTimer);
+      ledTimer = setTimeout(() => (led.className = 'led'), 700);
+      if (pending) { pending(ok); pending = null; }
+    }
+    frame.addEventListener('load', () => {
+      frame.contentWindow.addEventListener('scanner:result', (e) => onResult(e.detail.ok));
+      if (frame.contentWindow.location.pathname.endsWith('login.html')) location.href = '/admin/login.html';
+    });
+
+    // ---- Scan --------------------------------------------------------------
+    function payloadFor(code) {
+      const f = $('#format').value;
+      if (f === 'url') return `${location.origin}/p/${encodeURIComponent(code)}`;
+      if (f === 'json') return JSON.stringify({ sku: code });
+      return code;
+    }
+
+    async function scan(target = aim) {
+      if (busy) return;
+      if (!target) { onResult(false); return log(null, 'ยังไม่ได้เล็งสินค้า — คลิกเลือกสินค้าก่อน', false); }
+      busy = true;
+      $('#scan').disabled = true;
+      $('#scan').classList.add('pressed');
+      $('#head').classList.add('on');
+      const laser = $('#laser');
+      laser.classList.remove('go'); void laser.offsetWidth; laser.classList.add('go');
+      await sleep(180);
+      const payload = target.raw ? target.code : payloadFor(target.code);
+      const result = new Promise((r) => { pending = r; setTimeout(() => r(null), 1500); });
+      await typeIntoDevice(payload);
+      const ok = await result;
+      log(target.label, payload, ok);
+      if (target.code === unknownCode && ok) { unknownCode = newUnknown(); drawShelf(); } // it was added as a product: offer a fresh unknown code
+      $('#head').classList.remove('on');
+      $('#scan').classList.remove('pressed');
+      $('#scan').disabled = false;
+      busy = false;
+    }
+
+    function log(label, payload, ok) {
+      const box = $('#log');
+      if (box.querySelector('p')) box.innerHTML = '';
+      const row = document.createElement('div');
+      const state = ok === true ? '<span class="ok">✓ เจอ</span>' : ok === false ? '<span class="err">✗ ไม่เจอ</span>' : '<span class="muted">—</span>';
+      row.innerHTML = `<span class="muted">${new Date().toLocaleTimeString('th-TH')}</span>${state}<span style="flex:1">${esc(label || '')}<br><code>${esc(payload)}</code></span>`;
+      box.prepend(row);
+    }
+
+    // ---- Shelf -------------------------------------------------------------
+    const newUnknown = () => '2' + String(Math.floor(Math.random() * 1e12)).padStart(12, '0');
+    let unknownCode = newUnknown();
+
+    function drawShelf() {
+      const unknown = unknownCode;
+      const tiles = [
+        ...products.map((p) => ({ label: p.name, code: p.barcode || p.sku })),
+        { label: 'สินค้าที่ยังไม่มีในระบบ', code: unknown, special: true },
+      ];
+      $('#shelf').innerHTML = tiles.map((t, i) => `<button class="tile ${t.special ? 'special' : ''}" data-i="${i}">
+        <span class="nm">${esc(t.label)}</span><span class="cd">${esc(t.code)}</span></button>`).join('');
+      document.querySelectorAll('.tile').forEach((el) => {
+        const t = tiles[el.dataset.i];
+        el.onclick = () => {
+          document.querySelectorAll('.tile').forEach((x) => x.classList.toggle('aim', x === el));
+          aim = t;
+        };
+        el.ondblclick = () => { el.onclick(); scan(t); };
+        if (aim && aim.code === t.code) el.classList.add('aim'); // keep the aim across refreshes
+      });
+    }
+
+    async function loadProducts() {
+      const res = await fetch('/api/admin/products');
+      if (res.status === 401) return (location.href = '/admin/login.html');
+      products = (await res.json()).filter((p) => p.active);
+      drawShelf();
+    }
+
+    // ---- Controls ----------------------------------------------------------
+    document.querySelectorAll('[data-scan]').forEach((b) => b.addEventListener('click', () => scan()));
+    $('#custom').addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' || !e.target.value.trim()) return;
+      scan({ label: 'พิมพ์รหัสเอง', code: e.target.value.trim(), raw: true });
+      e.target.value = '';
+    });
+    // Space = trigger, also right after clicking a product tile (stop the button's own Space-click)
+    document.addEventListener('keydown', (e) => {
+      if (e.code !== 'Space' || e.target.matches('input, select, textarea')) return;
+      e.preventDefault();
+      if (!e.repeat) scan();
+    });
+    document.addEventListener('keyup', (e) => { if (e.code === 'Space' && e.target.matches('button')) e.preventDefault(); });
+    document.querySelectorAll('#modes button').forEach((b) => b.onclick = () => {
+      document.querySelectorAll('#modes button').forEach((x) => x.classList.toggle('active', x === b));
+      frame.contentWindow.location.hash = b.dataset.hash;
+    });
+    $('#k-back').onclick = () => frame.contentWindow.history.back();
+    $('#k-home').onclick = () => document.querySelector('#modes button').click();
+
+    loadProducts();
+    // keep the shelf in sync when products are added on the device
+    setInterval(loadProducts, 15000);
+  </script>
+</body>
+</html>
